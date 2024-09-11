@@ -1,0 +1,114 @@
+# logs-sampler pipeline - part 1
+DELETE _ingest/pipeline/logs-sampler
+PUT _ingest/pipeline/logs-sampler
+{
+  "processors": [
+    {
+      "set": {
+        "description": "Set Sampling Rate 0 None 10000 all allows for 0.01% precision",
+        "if": "ctx.sample.sample_rate == null",
+        "field": "sample.sample_rate",
+        "value": 10000
+      }
+    },
+    {
+      "set": {
+        "description": "Determine if keeping unsampled docs",
+        "if": "ctx.sample.keep_unsampled == null",
+        "field": "sample.keep_unsampled",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "field": "sample.sampled",
+        "value": false
+      }
+    },
+    {
+      "script": {
+        "source": """ Random r = new Random();
+        ctx.sample.random = r.nextInt(params.max); """,
+        "params": {
+          "max": 10000
+        }
+      }
+    },
+    {
+      "set": {
+        "if": "ctx.sample.random <= ctx.sample.sample_rate",
+        "field": "sample.sampled",
+        "value": true
+      }
+    },
+    {
+      "drop": {
+         "description": "Drop unsampled document if applicable",
+        "if": "ctx.sample.keep_unsampled == false && ctx.sample.sampled == false"
+      }
+    }
+  ]
+}
+
+# Process PII pipeline - part 1
+DELETE _ingest/pipeline/process-pii
+PUT _ingest/pipeline/process-pii
+{
+  "processors": [
+    {
+      "set": {
+        "description": "Set true if enabling sampling, otherwise false",
+        "field": "sample.enabled",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "description": "Set Sampling Rate 0 None 10000 all allows for 0.01% precision",
+        "field": "sample.sample_rate",
+        "value": 1000
+      }
+    },
+    {
+      "set": {
+        "description": "Set to false if you want to drop unsampled data, handy for reindexing hostorical data",
+        "field": "sample.keep_unsampled",
+        "value": true
+      }
+    },
+    {
+      "pipeline": {
+        "if": "ctx.sample.enabled == true",
+        "name": "logs-sampler",
+        "ignore_failure": true
+      }
+    }
+  ]
+}
+
+# logs@custom pipeline - part 1
+DELETE _ingest/pipeline/logs@custom
+PUT _ingest/pipeline/logs@custom
+{
+  "processors": [
+    {
+      "set": {
+        "field": "pipelinetoplevel",
+        "value": "logs@custom"
+      }
+    },
+        {
+      "set": {
+        "field": "pipelinetoplevelinfo",
+        "value": "{{{data_stream.dataset}}}"
+      }
+    },
+    {
+      "pipeline": {
+        "description" : "Call the process_pii pipeline on the correct dataset",
+        "if": "ctx?.data_stream?.dataset == 'pii'", 
+        "name": "process-pii"
+      }
+    }
+  ]
+}
