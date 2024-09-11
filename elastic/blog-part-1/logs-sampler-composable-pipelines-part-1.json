@@ -1,5 +1,4 @@
-## logs-sampler pipeline - part 1
-
+# logs-sampler pipeline - part 1
 DELETE _ingest/pipeline/logs-sampler
 PUT _ingest/pipeline/logs-sampler
 {
