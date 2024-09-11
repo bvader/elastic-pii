@@ -1,43 +1,47 @@
-# elastic-pii
+---
+title: "Using NLP and Pattern Matching to Detect, Assess, and Redact PII in Logs - Part 1"
+slug: "pii-ner-regex-assess-redact-part-1"
+date: "2024-09-19"
+description: "How to detect and assess PII in your logs using NLP"
+author:
+  - slug: stephen-brown
+image: "pii-ner-regex-assess-redact-part-1.png"
+tags:
+  - slug: log-analytics
+  - slug: security
+---
+## Introduction:
 
+The prevalence of high-entropy logs in distributed systems has significantly raised the risk of PII (Personally Identifiable Information) seeping into our logs, which can result in security and compliance issues. This 2-part blog delves into the crucial task of identifying and managing this issue. We will explore using NLP (Natural Language Processing) and Pattern matching to detect, assess, and, where feasible, redact PII.  
 
-## Using NLP and Pattern Matching to Detect, Assess and Redact PII
-
-
-## Abstract
-
-The prevalence of high-entropy logs in distributed systems has significantly raised the risk of PII (Personally Identifiable Information) seeping into our logs, which can result in security and compliance issues. This blog delves into the crucial task of identifying and managing this issue. We will explore using NLP (Natural Language Processing) and Pattern matching to detect and, where feasible, redact PII. 
-
-In this 2 part blog 
+In Part 1 of this blog, we will cover the following:
 
 * Review the techniques and tools we have available
-* Loading and Scaling NER
-* Sample logs to see if, what, and how much PII is in the logs
-    * Incoming and Historical data
-* Assess the results of the Sampling Runs
-* Redact PII using NER and `redact` Processor
+* Understand NLP / NER Role in PII Detections  
+* Sample logs and run them through the NER Model 
+* Assess the results of the NER Model 
+
+In Part 2 of this blog, we will cover the following:
+
+* Redact PII using NER and redact Processor
 * Apply Field Level Security to Control Access to the Un-Redacted Data
-* Create Dashboards and Alerts
+* Enhance the Dashboards and Alerts
+* Production considerations
 
-In part 1 of this blog we are going to focus on the …
+Here is the overall flow we will construct over the 2 blogs:
 
-All code is available here: 
+![PII Overall Flow](/assets/images/pii-ner-regex-assess-redact-part-1/pii-overall-flow.png)
 
-Here is the overall flow we will construct
+All code for this exercise can be found at:
+[https://github.com/bvader/elastic-pii](https://github.com/bvader/elastic-pii). 
 
- 
-
-<p id="gdcalert1" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image1.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert2">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
-
-
-![alt_text](images/image1.png "image_tooltip")
-
+Loading Data instructions can be found [Data Loading](#data-loading) 
 
 ## Tools and Techniques
 
 There are three general capabilities that we will use for this exercise. 
 
-* Named Entity Recognition Detection
+* Named Entity Recognition Detection (NER)
 * Pattern Matching Detection
 * Log Sampling
 * Ingest Pipelines as Composable Processing 
@@ -47,16 +51,14 @@ There are three general capabilities that we will use for this exercise.
 
 NER is a sub-task of Natural Language Processing (NLP) that involves identifying and categorizing named entities in unstructured text into predefined categories such as:
 
-
-
 * Person: Names of individuals, including celebrities, politicians, and historical figures.
 * Organization: Names of companies, institutions, and organizations.
 * Location: Geographic locations, including cities, countries, and landmarks.
 * Event: Names of events, including conferences, meetings, and festivals.
 
-For our use PII case, we will choose a small optimized NER model [distilbert-NER](https://huggingface.co/dslim/distilbert-NER) that can be downloaded from [Hugging Face](https://huggingface.co) and loaded into Elasticsearch as a trained model. (TODO) talk about tradeoffs go back (TODO) go back to base
+For our use PII case, we will choose a small optimized NER model [distilbert-NER](https://huggingface.co/dslim/distilbert-NER) that can be downloaded from [Hugging Face](https://huggingface.co) and loaded into Elasticsearch as a trained model. (TODO) talk about tradeoffs, go back (TODO) go back to base
 
-**NOTE: It is important to note that NER / NLP Models are CPU-intensive and expensive to run at scale; thus, we will want to employ a sampling technique to understand the risk in our logs without having to send all our logs through the NER Model. **
+**NOTE: It is important to note that NER / NLP Models are CPU-intensive and expensive to run at scale;** thus, we will want to employ a sampling technique to understand the risk in our logs without sending the full logs volume through the NER Model.
 
 
 #### Pattern Matching Detection 
@@ -73,20 +75,22 @@ Considering the performance implications of NER and the fact that we may be inge
 
 We will create several pipelines, each focusing on a specific capability and a main ingest pipeline to orchestrate the overall process. 
 
-
 ## Building the Processing Flow 
 
+#### Logs Sampling + Composable Ingest Pipelines
 
-#### Log Sampling + Composable Ingest Pipelines
-
-The first thing we will do is set up a sampler to sample our logs. This ingest pipeline simply takes a sampling rate between 0 (no log) and 10000 (all logs), which allows as low as ~0.01% sampling rate and marks the sampled logs with sample.sampled: true. Further processing on the logs will be driven by the value of sample.sampled. The sample.sample_rate can be set here or "passed in" from the orchestration pipeline.
+The first thing we will do is set up a sampler to sample our logs. This ingest pipeline simply takes a sampling rate between 0 (no log) and 10000 (all logs), which allows as low as ~0.01% sampling rate and marks the sampled logs with `sample.sampled: true`. Further processing on the logs will be driven by the value of `sample.sampled`. The sample.sample_rate can be set here or "passed in" from the orchestration pipeline.
 
 The command should be run from the Kibana -> Dev Tools
 
+Code can be found here for the following three sections. 
 
+
+<details open>
+  <summary>logs-sampler pipeline code - click to collapse</summary>
 ```
-DELETE _ingest/pipeline/log_sampler
-PUT _ingest/pipeline/log_sampler
+DELETE _ingest/pipeline/logs_sampler
+PUT _ingest/pipeline/logs_sampler
 {
   "processors": [
     {
@@ -136,12 +140,57 @@ PUT _ingest/pipeline/log_sampler
   ]
 }
 ```
-
+</details>
 
 Now, let's test the logs sampler. We will build the first part of the composable pipeline. We will be sending logs to the logs-generic-default data stream. With that in mind, we will create the `logs@custom` ingest pipeline that will be automatically called using the logs [data stream framework](https://www.elastic.co/guide/en/fleet/current/data-streams.html#data-streams-pipelines) for customization. We will add one additional level of abstraction so that you can apply this PII processing to other data streams.
 
-First, we create the logs logs@custom, which will simply call our process_pii pipeline, which we will use to orchestrate the overall processing flow. 
+Next, we will create the process-pii pipeline. This is the core processing pipeline where we will orchestrate PII processing component pipelines. In this first step, we will simply apply the sampling logic. Note that we are setting the sampling rate to 100, which is equivalent to 1.0% of the logs.
 
+<details open>
+  <summary>process-pii pipeline code - click to collapse</summary>
+```
+# Process PII pipeline - part 1
+DELETE _ingest/pipeline/process-pii
+PUT _ingest/pipeline/process-pii
+{
+  "processors": [
+    {
+      "set": {
+        "description": "Set true if enabling sampling, otherwise false",
+        "field": "sample.enabled",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "description": "Set Sampling Rate 0 None 10000 all allows for 0.01% precision",
+        "field": "sample.sample_rate",
+        "value": 1000
+      }
+    },
+    {
+      "set": {
+        "description": "Set to false if you want to drop unsampled data, handy for reindexing hostorical data",
+        "field": "sample.keep_unsampled",
+        "value": true
+      }
+    },
+    {
+      "pipeline": {
+        "if": "ctx.sample.enabled == true",
+        "name": "logs-sampler",
+        "ignore_failure": true
+      }
+    }
+  ]
+}
+```
+</details>
+
+Finally, we create the logs `logs@custom`, which will simply call our `process-pii` pipeline based on the correct `data_stream.dataset`
+
+<details open>
+  <summary>logs@custom pipeline code - click to collapse</summary>
 ```
 DELETE _ingest/pipeline/logs@custom
 PUT _ingest/pipeline/logs@custom
@@ -169,64 +218,18 @@ PUT _ingest/pipeline/logs@custom
   ]
 }
 ```
+</details>
 
-Then, the process_pii will simply apply the sampling logic. Note that we are setting the sampling rate to 100, which is equivalent to 1.0% of the logs.
+Now, let's test to see the sampling at work.
 
-```
-DELETE _ingest/pipeline/process_pii
-PUT _ingest/pipeline/process_pii
-{
-  "processors": [
-    {
-      "set": {
-        "description": "Set true if enabling sampling, otherwise false",
-        "field": "sample.enabled",
-        "value": true
-      }
-    },
-    {
-      "set": {
-        "description": "Set Sampling Rate 0 None 10000 all allows for 0.01% precision",
-        "field": "sample.sample_rate",
-        "value": 1000
-      }
-    },
-    {
-      "set": {
-        "description": "Set to false if you want to drop unsampled data, handy for reindexing hostorical data",
-        "field": "sample.keep_unsampled",
-        "value": true
-      }
-    },
-    {
-      "pipeline": {
-        "if": "ctx.sample.enabled == true",
-        "name": "log_sampler",
-        "ignore_failure": true
-      }
-    }
-  ]
-}
-```
-
-Now, let's test to see the sampling at work…
-
-TODO: Load the data as described here (Link to loading data)
+Load the data as described here [Data Loading](#data-loading). Let's use the sample data first, and we will talk about how to test with your incoming or historical logs later at the end of this blog. 
 
 If you look at Discover with KQL filter `data_stream.dataset : pii` and Breakdown by sample.sampled, you should see the breakdown to be approximately 10%
 
+![PII Discover 1](/assets/images/pii-ner-regex-assess-redact-part-1/pii-discover-1-part-1.png)
 
 
-
-<p id="gdcalert2" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image2.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert3">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
-
-
-![alt_text](images/image2.png "image_tooltip")
-
- 
-
-At this point we have a composable ingest pipeline that is "sampling" logs. As a bonus, you can use this sampler for any other use cases you have as well. 
-
+At this point we have a composable ingest pipeline that is "sampling" logs. As a bonus, you can use this logs sampler for any other use cases you have as well. 
 
 #### Loading, Configuration, and Execution of the NER Pipeline
 
@@ -275,49 +278,34 @@ We will configure
 * 0 Byes Cache, as we expect a low cache hit rate 
 * 8192 Queue
 
-
  (TODO fix with full Model)
 
+```
 # 8 Allocators x 1 Thread, 0 Cache, Queue 8192
-
 POST _ml/trained_models/dslim__distilbert-ner/deployment/_start?cache_size=0b&number_of_allocations=8&threads_per_allocation=1&queue_capacity=8192
+```
 
 
 You should get a response that looks something like this. (TODO fix with full Model)
 
-
+```
 {
-
   "assignment": {
-
     "task_parameters": {
-
       "model_id": "dslim__distilbert-ner",
-
       "deployment_id": "dslim__distilbert-ner",
-
       "model_bytes": 260831330,
-
       "threads_per_allocation": 1,
-
       "number_of_allocations": 8,
-
       "queue_capacity": 8192,
-
       "cache_size": "0",
-
       "priority": "normal",
-
       "per_deployment_memory_bytes": 260795428,
-
       "per_allocation_memory_bytes": 544331848
-
     },
-
-   …
-
+    …
 }
-
+```
 
 
 
@@ -342,251 +330,134 @@ The Complete Code.
 
 The NER PII Pipeline
  (TODO fix with full Model)
-
+```
 PUT _ingest/pipeline/logs_ner_pii_processor
-
 {
-
   "processors": [
-
     {
-
       "set": {
-
         "description": "Set to true to actually redact, false will run processors but leave original",
-
         "field": "redact.enable",
-
         "value": true
-
       }
-
     },
-
     {
-
       "set": {
-
         "description": "Set to true to keep ml results for debugging",
-
         "field": "redact.ner.keep_result",
-
         "value": true
-
       }
-
     },
-
     {
-
       "set": {
-
         "description": "Set to PER, LOC, ORG to skip, or NONE to not drop any replacement",
-
         "field": "redact.ner.skip_entity",
-
         "value": "NONE"
-
       }
-
     },
-
     {
-
       "set": {
-
         "description": "Set to PER, LOC, ORG to skip, or NONE to not drop any replacement",
-
         "field": "redact.ner.minimum_score",
-
         "value": 0.0
-
       }
-
     },
-
     {
-
       "set": {
-
         "if" : "ctx.redact.message == null",
-
         "field": "redact.message",
-
         "copy_from": "message"
-
       }
-
     },
-
     {
-
       "set": {
-
         "field": "redact.successful",
-
         "value": true
-
       }
-
     },
-
     {
-
-**      "inference": {**
-
-**        "model_id": "dslim__distilbert-ner",**
-
-**        "field_map": {**
-
-**          "message": "text_field"**
-
-**        },**
-
+      "inference": {
+        "model_id": "dslim__distilbert-ner",
+        "field_map": {
+          "message": "text_field"
+        },
         "on_failure": [
-
           {
-
             "set": {
-
               "description": "Set 'error.message'",
-
               "field": "failure",
-
               "value": "REDACT_NER_FAILED"
-
             }
-
           },
-
           {
-
             "set": {
-
               "field": "redact.successful",
-
               "value": false
-
             }
-
           }
-
         ]
-
       }
-
     },
-
     {
-
-      **"script": {**
-
-**        "if": "ctx.failure_ner != 'REDACT_NER_FAILED'",**
-
-**        "lang": "painless",**
-
-**        "source": """String msg = ctx['message'];**
-
-**          for (item in ctx['ml']['inference']['entities']) {**
-
-**          	if ((item['class_name'] != ctx.redact.ner.skip_entity) && **
-
-**          	  (item['class_probability'] >= ctx.redact.ner.minimum_score)) {  **
-
-**          		  msg = msg.replace(item['entity'], '&lt;' + **
-
-**                'REDACTNER-'+ item['class_name'] + '>')**
-
-**          	}**
-
-**          }**
-
-**          ctx.redact.message = msg""",**
-
+      "script": {
+        "if": "ctx.failure_ner != 'REDACT_NER_FAILED'",
+        "lang": "painless",
+        "source": """String msg = ctx['message'];
+          for (item in ctx['ml']['inference']['entities']) {
+            if ((item['class_name'] != ctx.redact.ner.skip_entity) && 
+              (item['class_probability'] >= ctx.redact.ner.minimum_score)) {  
+                msg = msg.replace(item['entity'], '<' + 
+                'REDACTNER-'+ item['class_name'] + '>')
+            }
+          }
+          ctx.redact.message = msg""",
         "on_failure": [
-
           {
-
             "set": {
-
               "description": "Set 'error.message'",
-
               "field": "failure",
-
               "value": "REDACT_REPLACEMENT_SCRIPT_FAILED",
-
               "override": false
-
             }
-
           },
-
           {
-
             "set": {
-
               "field": "redact.successful",
-
               "value": false
-
             }
-
           }
-
         ]
-
       }
-
     },
-
     {
-
       "remove": {
-
         "if": "ctx.redact.ner.keep_result != true",
-
         "field": [
-
           "ml"
-
         ],
-
         "ignore_missing": true,
-
         "ignore_failure": true
-
       }
-
     }
-
   ],
-
   "on_failure": [
-
     {
-
       "set": {
-
         "field": "failure",
-
         "value": "GENERAL_FAILURE",
-
         "override": false
-
       }
-
     }
-
   ]
-
 }
+
+```
+
 
 And the Updated PII Processor Pipeline, which now calls the NER Pipeline
 
-`PUT _ingest/pipeline/process_pii`
-
-
 ```
+PUT _ingest/pipeline/process_pii
 {
   "processors": [
     {
@@ -633,94 +504,25 @@ And the Updated PII Processor Pipeline, which now calls the NER Pipeline
     }
   ]
 }
+
 ```
 
 
-TODO: Now Reload the data as described here (Link to loading data)
+**TODO: Now Reload the data as described here (Link to loading data)***
 
 Let's take a look at the results. In the Discover KQL query bar, execute the following query
 `data_stream.dataset : pii and ml.inference.entities.class_name : ("PER" and "LOC" and "ORG" )` 
 
 Discover should look something like this
 
-
-
-<p id="gdcalert3" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image3.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert4">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
-
-
-![alt_text](images/image3.png "image_tooltip")
+![PII Discover 2](/assets/images/pii-ner-regex-assess-redact-part-1/pii-discover-2-part-1.png)
 
 
  if you inspect the details of one of the documents, you should see the following. 
 
 Let's look at a few of these fields in a little more detail. 
 
-
-
-
-
-<table>
-  <tr>
-   <td>
-   </td>
-   <td>
-   </td>
-   <td>
-   </td>
-  </tr>
-  <tr>
-   <td>
-   </td>
-   <td>
-   </td>
-   <td>
-   </td>
-  </tr>
-</table>
-
-
-
-message
-
-[2024-08-23T09:11:06.587449-07:00Z] log.level=INFO: Payment successful for order #8998 (user: Sarah Brown, dude4321@gmail.com). Phone: (773)-672-2524 Address: 232 Maple St, Sunnyvale, FL 98765 From: Paul's Pets
-
-Field: `ml.inference.entities.class_name`
-
-Description: These are the class of entities found. 
-
-Value : `[PER, LOC, LOC, LOC, PER, ORG]`
-
-ml.inference.entities.class_probability
-
-[0.996, 0.948, 0.903, 0.977, 0.509, 0.856]
-
-ml.inference.entities.end_pos
-
-[105, 171, 182, 186, 203, 210]
-
-ml.inference.entities.entity
-
-[Sarah Brown, Maple St, Sunnyvale, FL, Paul, 's Pets]
-
-ml.inference.entities.start_pos
-
-[94, 163, 173, 184, 199, 203]
-
-ml.inference.model_id
-
-dslim__distilbert-ner
-
-ml.inference.predicted_value
-
-[2024-08-23T09:11:06.587449-07:00Z] log.level=INFO: Payment successful for order #8998 (user: [Sarah Brown](PER&Sarah+Brown), dude4321@gmail.com). Phone: (773)-672-2524 Address: 232 [Maple St](LOC&Maple+St), [Sunnyvale](LOC&Sunnyvale), [FL](LOC&FL) 98765 From: [Paul](PER&Paul)['s Pets](ORG&'s+Pets)
-
-redact.enable
-
-true
-
-redact.message
-
-[2024-08-23T09:11:06.587449-07:00Z] log.level=INFO: Payment successful for order #8998 (user: &lt;REDACTNER-PER>, dude4321@gmail.com). Phone: (773)-672-2524 Address: 232 &lt;REDACTNER-LOC>, &lt;REDACTNER-LOC>, &lt;REDACTNER-LOC> 98765 From: &lt;REDACTNER-PER>&lt;REDACTNER-ORG>
+Todo
 
 
 ## Code
@@ -729,32 +531,46 @@ Navigate to
 
 [https://github.com/bvader/elastic-pii](https://github.com/bvader/elastic-pii)
 
-
+```
 $ git clone https://github.com/bvader/elastic-pii.git
-
+```
 
 ## Data Loading
 
 
 #### Creating and Loading the Sample Data Set 
 
-
+```
 $ cd python
-
 $ python -m venv .env
-
 $ source .env/bin/activate
-
 $ pip install elasticsearch
+```
 
 Run the log generator 
-
-$ python generate_random_logs.py 
+```
+$ python generate_random_logs.py
+```
 
 If you do not changes any parameters, this will create 10000 random logs in a file named pii.log with a mix of logs that containe and do not contain PII. 
 
-Edit load_logs.py and set the following 
+Edit `load_logs.py` and set the following 
 
+```
+# The Elastic User 
+ELASTIC_USER = "elastic"
+
+# Password for the 'elastic' user generated by Elasticsearch
+ELASTIC_PASSWORD = "askdjfhasldfkjhasdf"
+
+# Found in the 'Manage Deployment' page
+ELASTIC_CLOUD_ID = "deployment:sadfjhasfdlkjsdhf3VuZC5pbzo0NDMkYjA0NmQ0YjFiYzg5NDM3ZDgxM2YxM2RhZjQ3OGE3MzIkZGJmNTE0OGEwODEzNGEwN2E3M2YwYjcyZjljYTliZWQ="
+```
+and run 
+
+```
+$ python load_logs.py
+```
 
 #### Assesing Your Incoming Logs 
 
