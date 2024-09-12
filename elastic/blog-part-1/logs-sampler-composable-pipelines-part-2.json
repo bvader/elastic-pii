@@ -4,12 +4,11 @@
 
 # Load Model 
 
-# $ docker run -it --rm --network host elastic/eland \
-#     eland_import_hub_model \
-#     --url https://my-deployment.es.us-west-1.aws.found.io:443/ \
-#     -u elastic -p <password> \
-#     --hub-model-id dslim/distilbert-NER \
-#     --task-type ner
+# docker run -it --rm --network host docker.elastic.co/eland/eland \
+#   eland_import_hub_model \
+#   --url https://mydeployment.es.us-west-1.aws.found.io:443/ \
+#   -u elastic -p password \
+#   --hub-model-id dslim/bert-base-NER --task-type ner
 
 
 # Model Commands...
@@ -25,6 +24,9 @@ GET _ml/trained_models/dslim__bert-base-ner/_stats
 
 # Stop Model
 POST _ml/trained_models/dslim__bert-base-ner/deployment/_stop?force=true
+
+# Delete Model
+DELETE _ml/trained_models/dslim__bert-base-ner
 
 # NER Pipeline
 DELETE _ingest/pipeline/logs-ner-pii-processor
