@@ -4,35 +4,29 @@
 
 # Load Model 
 
-# docker run -it --rm --network host elastic/eland \
-#  eland_import_hub_model \
-#  --url https://my-deployment.es.us-west-1.aws.found.io:443/ \
-#  -u elastic -p <password> \
-#  --hub-model-id dslim/distilbert-NER \
-#  --task-type ner
+# $ docker run -it --rm --network host elastic/eland \
+#     eland_import_hub_model \
+#     --url https://my-deployment.es.us-west-1.aws.found.io:443/ \
+#     -u elastic -p <password> \
+#     --hub-model-id dslim/distilbert-NER \
+#     --task-type ner
 
 
-# 8 Allocators x 1 Thread, 0 Cache, Queue 8192
-POST _ml/trained_models/dslim__distilbert-ner/deployment/_start?cache_size=0b&number_of_allocations=8&threads_per_allocation=1&queue_capacity=8192
+# Model Commands...
 
+# Start the model with 4 Allocators x 1 Thread, no cashe and 8192 queue
+POST _ml/trained_models/dslim__bert-base-ner/deployment/_start?cache_size=0b&number_of_allocations=4&threads_per_allocation=1&queue_capacity=8192
 
-#{
-#  "assignment": {
-#    "task_parameters": {
-#      "model_id": "dslim__distilbert-ner",
-#      "deployment_id": "dslim__distilbert-ner",
-#      "model_bytes": 260831330,
-#      "threads_per_allocation": 1,
-#      "number_of_allocations": 8,
-#      "queue_capacity": 8192,
-#      "cache_size": "0",
-#      "priority": "normal",
-#      "per_deployment_memory_bytes": 260795428,
-#      "per_allocation_memory_bytes": 544331848
-#    },
-#   …
-#}
+# Get the model
+GET _ml/trained_models/dslim__bert-base-ner
 
+# Model Stats
+GET _ml/trained_models/dslim__bert-base-ner/_stats
+
+# Stop Model
+POST _ml/trained_models/dslim__bert-base-ner/deployment/_stop?force=true
+
+# NER Pipeline
 DELETE _ingest/pipeline/logs-ner-pii-processor
 PUT _ingest/pipeline/logs-ner-pii-processor
 {
@@ -154,7 +148,7 @@ PUT _ingest/pipeline/logs-ner-pii-processor
   ]
 }
 
-
+# Updated Process PII pipeline that now call the NER pipeline
 DELETE _ingest/pipeline/process-pii
 PUT _ingest/pipeline/process-pii
 {
