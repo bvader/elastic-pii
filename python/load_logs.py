@@ -49,16 +49,17 @@ print(f"Connection Established : \n{json.dumps(es.info().body,indent=4)}")
 # Define the index name (and optionally document type)
 data_stream = DATA_STREAM_TYPE+"-"+DATA_STREAM_DATASET+"-"+DATA_STREAM_NAMESPACE
 
+# Get time and create run id
+now = datetime.now(timezone.utc).astimezone()
+run_id = "load-run-" + str(int(now.timestamp()))
+
 # Read the file and load the data
 bulk_size = 500
 count = 0
 total_count = 0
 data = []
 
-# Get time and create run id
-now = datetime.now(timezone.utc).astimezone()
-run_id = "load-run-" + str(int(now.timestamp()))
-
+# Loop through file
 with open(LOG_FILE, "r") as f:
   for line in f:
     
