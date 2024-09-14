@@ -1,6 +1,8 @@
 import random
 import datetime
 from datetime import datetime, timezone
+from faker import Faker
+fake = Faker()
 
 # Parameters 
 LOG_NUM_LINES = 10000
@@ -9,33 +11,26 @@ LOG_FILE_NAME = "./pii.log"
 # Define functions to generate random data (same as before)
 # Define functions to generate random data
 def generate_name():
-  first_names = ["John", "Jane", "Michael", "Sarah", "David", "Emily", "Jessica", "Robert", "Ashley", "William"]
-  last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson"]
-  return f"{random.choice(first_names)} {random.choice(last_names)}"
+  return fake.name()
 
 def generate_email():
-  emails = ["lucky123", "dude4321", "kitty1823", "jedi08u8", "hackOne123", "badMath234", "davcey999", "garp587", "R0ddydriguez", "w33ldl3"]
-  return f"{''.join(random.choices(emails))}@{random.choice(['gmail', 'yahoo', 'hotmail'])}.com"
+  return fake.ascii_email()
 
 def generate_address():
-  street_numbers = [str(x) for x in range(1, 1001)]
-  street_names = ["Main St", "Elm St", "Maple St", "Oak St", "Pine St"]
-  cities = ["Anytown", "Springfield", "Sunnyvale", "Lakewood", "Fairfield"]
-  states = ["CA", "TX", "FL", "NY", "IL"]
-  zip_codes = ["12345", "54321", "98765", "00000"]
-  return f"{random.choice(street_numbers)} {random.choice(street_names)}, {random.choice(cities)}, {random.choice(states)} {random.choice(zip_codes)}"
+  address = fake.address()
+  clean_address = address.replace("\n", ", ")
+  return clean_address
 
 def generate_phone_number():
-  area_codes = ["212", "310", "415", "617", "773"]
-  return f"({random.choice(area_codes)})-{random.randint(100, 999)}-{random.randint(1000, 9999)}"
+  return fake.phone_number()
 
 def generate_org():
-  orgs = ["Wells Fargo", "USAA", "Bank of America", "Social Finance" ]
+  orgs = ["Chase", "Capital One Bank", "Wells Fargo", "Citibank", "Bank of America", "PNC Bank", "Synchrony Bank", "Barclay's", "Huntington", "U.S. Bank", "TD Bank", "TD Bank", "Citizens Bank", "ACORNS", "Ally Bank", "SunTrust", "Bank of New York", "HSBC", "M&T Bank", "Truist", "Regions Bank", "Social Finance" ]
   return f"{random.choice(orgs)}"
 
 def generate_business():
-  orgs = ["Amazon", "Nike", "Disney", "Walmart", "Ross", "Chewy", "ACME"]
-  return f"{random.choice(orgs)}"  
+  orgs = ["Amazon", "Alibaba Group", "eBay", "The Home Depot", "Walmart", "MercadoLibre", "Costco", "Flipkart", "Jingdong Mall", "Pinduoduo", "Meta", "Target", "Microsoft", "Apple ", "Samsung", "Craigslist", "Best Buy", "Etsy", "Wish", "Macy’s", "ASOS", "Wildberries", "Coupang", "Wayfair", "Chewy", "Zalando", "IKEA", "Newegg", "Ozon", "Shopee"]
+  return f"{random.choice(orgs)}" 
 
 def generate_credit_card():
   # This generates a random number that follows the format of a credit card but is not guaranteed to be valid

@@ -8,7 +8,7 @@ import random
 
 
 # Define the path to your text file
-TEXT_FILE = "./pii.log"
+LOG_FILE = "./pii.log"
 
 # The Elastic User 
 ELASTIC_USER = "elastic"
@@ -49,27 +49,30 @@ print(f"Connection Established : \n{json.dumps(es.info().body,indent=4)}")
 # Define the index name (and optionally document type)
 data_stream = DATA_STREAM_TYPE+"-"+DATA_STREAM_DATASET+"-"+DATA_STREAM_NAMESPACE
 
-
 # Read the file and load the data
 bulk_size = 500
 count = 0
 total_count = 0
 data = []
-with open(TEXT_FILE, "r") as f:
+
+# Get time and create run id
+now = datetime.now(timezone.utc).astimezone()
+run_id = "load-run-" + str(int(now.timestamp()))
+
+with open(LOG_FILE, "r") as f:
   for line in f:
     
     # Assuming each line represents a single document
-    # Notes since writing to a data stream @timestamp is added automatically
-    now = datetime.now(timezone.utc).astimezone()
+    # subtract random time to spread out the logs
     d = timedelta(seconds=(random.randint(0,300)))
     timestamp = (now-d).isoformat()
-    run_id = "load-run-" + str(int(now.timestamp()))
     document = {
         "@timestamp" : timestamp,
         "message" : line.strip(),
         "service" : {"name": SERVICE_NAME},
         "data_stream": {"dataset" : DATA_STREAM_DATASET, "namespace" : DATA_STREAM_NAMESPACE},
-        "run.id" : run_id
+        "run.id" : run_id,
+        "file.name" : LOG_FILE
         }
     action = {
       "_index": data_stream,
