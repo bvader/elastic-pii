@@ -1,0 +1,281 @@
+###################################################################################################
+# Loading, Configuration, and Execution of the NER Pipeline
+###################################################################################################
+
+###################################################################################################
+# Load NER Model 
+###################################################################################################
+
+# docker run -it --rm --network host docker.elastic.co/eland/eland \
+#   eland_import_hub_model \
+#   --url https://mydeployment.es.us-west-1.aws.found.io:443/ \
+#   -u elastic -p password \
+#   --hub-model-id dslim/bert-base-NER --task-type ner
+
+
+# Model Commands...
+
+# Start the model with 4 Allocators x 1 Thread, no cashe and 8192 queue
+POST _ml/trained_models/dslim__bert-base-ner/deployment/_start?cache_size=0b&number_of_allocations=4&threads_per_allocation=1&queue_capacity=8192
+
+# Get the model
+GET _ml/trained_models/dslim__bert-base-ner
+
+# Model Stats
+GET _ml/trained_models/dslim__bert-base-ner/_stats
+
+# Stop Model
+POST _ml/trained_models/dslim__bert-base-ner/deployment/_stop?force=true
+
+# Delete Model
+DELETE _ml/trained_models/dslim__bert-base-ner
+
+
+###################################################################################################
+# Load Ingest Pipelines 
+###################################################################################################
+
+
+# Logs Custom Pipeline logs@custom pipeline
+DELETE _ingest/pipeline/logs@custom
+PUT _ingest/pipeline/logs@custom
+{
+  "processors": [
+    {
+      "set": {
+        "field": "pipelinetoplevel",
+        "value": "logs@custom"
+      }
+    },
+        {
+      "set": {
+        "field": "pipelinetoplevelinfo",
+        "value": "{{{data_stream.dataset}}}"
+      }
+    },
+    {
+      "pipeline": {
+        "description" : "Call the process_pii pipeline on the correct dataset",
+        "if": "ctx?.data_stream?.dataset == 'pii'", 
+        "name": "process-pii"
+      }
+    }
+  ]
+}
+
+
+# Logs Sampler 
+DELETE _ingest/pipeline/logs-sampler
+PUT _ingest/pipeline/logs-sampler
+{
+  "processors": [
+    {
+      "set": {
+        "description": "Set Sampling Rate 0 None 10000 all allows for 0.01% precision",
+        "if": "ctx.sample.sample_rate == null",
+        "field": "sample.sample_rate",
+        "value": 10000
+      }
+    },
+    {
+      "set": {
+        "description": "Determine if keeping unsampled docs",
+        "if": "ctx.sample.keep_unsampled == null",
+        "field": "sample.keep_unsampled",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "field": "sample.sampled",
+        "value": false
+      }
+    },
+    {
+      "script": {
+        "source": """ Random r = new Random();
+        ctx.sample.random = r.nextInt(params.max); """,
+        "params": {
+          "max": 10000
+        }
+      }
+    },
+    {
+      "set": {
+        "if": "ctx.sample.random <= ctx.sample.sample_rate",
+        "field": "sample.sampled",
+        "value": true
+      }
+    },
+    {
+      "drop": {
+         "description": "Drop unsampled document if applicable",
+        "if": "ctx.sample.keep_unsampled == false && ctx.sample.sampled == false"
+      }
+    }
+  ]
+}
+
+# NER Pipeline
+DELETE _ingest/pipeline/logs-ner-pii-processor
+PUT _ingest/pipeline/logs-ner-pii-processor
+{
+  "processors": [
+    {
+      "set": {
+        "description": "Set to true to actually redact, false will run processors but leave original",
+        "field": "redact.enable",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "description": "Set to true to keep ml results for debugging",
+        "field": "redact.ner.keep_result",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "description": "Set to PER, LOC, ORG to skip, or NONE to not drop any replacement",
+        "field": "redact.ner.skip_entity",
+        "value": "NONE"
+      }
+    },
+    {
+      "set": {
+        "description": "Set to PER, LOC, ORG to skip, or NONE to not drop any replacement",
+        "field": "redact.ner.minimum_score",
+        "value": 0.0
+      }
+    },
+    {
+      "set": {
+        "if" : "ctx.redact.message == null",
+        "field": "redact.message",
+        "copy_from": "message"
+      }
+    },
+    {
+      "set": {
+        "field": "redact.successful",
+        "value": true
+      }
+    },
+    {
+      "inference": {
+        "model_id": "dslim__bert-base-ner",
+        "field_map": {
+          "message": "text_field"
+        },
+        "on_failure": [
+          {
+            "set": {
+              "description": "Set 'error.message'",
+              "field": "failure",
+              "value": "REDACT_NER_FAILED"
+            }
+          },
+          {
+            "set": {
+              "field": "redact.successful",
+              "value": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "script": {
+        "if": "ctx.failure_ner != 'REDACT_NER_FAILED'",
+        "lang": "painless",
+        "source": """String msg = ctx['message'];
+          for (item in ctx['ml']['inference']['entities']) {
+          	if ((item['class_name'] != ctx.redact.ner.skip_entity) && 
+          	  (item['class_probability'] >= ctx.redact.ner.minimum_score)) {  
+          		  msg = msg.replace(item['entity'], '<' + 
+          		  'REDACTNER-'+ item['class_name'] + '>')
+          	}
+          }
+          ctx.redact.message = msg""",
+        "on_failure": [
+          {
+            "set": {
+              "description": "Set 'error.message'",
+              "field": "failure",
+              "value": "REDACT_REPLACEMENT_SCRIPT_FAILED",
+              "override": false
+            }
+          },
+          {
+            "set": {
+              "field": "redact.successful",
+              "value": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "remove": {
+        "if": "ctx.redact.ner.keep_result != true",
+        "field": [
+          "ml"
+        ],
+        "ignore_missing": true,
+        "ignore_failure": true
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "set": {
+        "field": "failure",
+        "value": "GENERAL_FAILURE",
+        "override": false
+      }
+    }
+  ]
+}
+
+# Updated Process PII pipeline that now call the NER pipeline
+DELETE _ingest/pipeline/process-pii
+PUT _ingest/pipeline/process-pii
+{
+  "processors": [
+    {
+      "set": {
+        "description": "Set true if enabling sampling, otherwise false",
+        "field": "sample.enabled",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "description": "Set Sampling Rate 0 None 10000 all allows for 0.01% precision",
+        "field": "sample.sample_rate",
+        "value": 1000
+      }
+    },
+    {
+      "set": {
+        "description": "Set to false if you want to drop unsampled data, handy for reindexing hostorical data",
+        "field": "sample.keep_unsampled",
+        "value": true
+      }
+    },
+    {
+      "pipeline": {
+        "if": "ctx.sample.enabled == true",
+        "name": "logs-sampler",
+        "ignore_failure": true
+      }
+    },
+    {
+      "pipeline": {
+        "if": "ctx.sample.enabled == false || (ctx.sample.enabled == true && ctx.sample.sampled == true)",
+        "name": "logs-ner-pii-processor"
+      }
+    }
+  ]
+}

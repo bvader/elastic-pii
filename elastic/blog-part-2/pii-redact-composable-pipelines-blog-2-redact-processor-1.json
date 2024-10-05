@@ -1,0 +1,144 @@
+###################################################################################################
+# PART 2 _ Loading, Configuration, and Execution of the Redact  Pipeline Part 2
+###################################################################################################
+
+# Add the PII redact processor pipeline
+DELETE _ingest/pipeline/logs-pii-redact-processor
+PUT _ingest/pipeline/logs-pii-redact-processor
+{
+  "processors": [
+    {
+      "set": {
+        "field": "redact.proc.successful",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "field": "redact.proc.found",
+        "value": false
+      }
+    },
+    {
+      "set": {
+        "if": "ctx?.redact?.message == null",
+        "field": "redact.message",
+        "copy_from": "message"
+      }
+    },
+    {
+      "redact": {
+        "field": "redact.message",
+        "prefix": "<REDACTPROC-",
+        "suffix": ">",
+        "patterns": [
+          "%{EMAILADDRESS:EMAIL_REGEX}",
+          "%{IP:IP_ADDRESS_REGEX}",
+          "%{CREDIT_CARD:CREDIT_CARD_REGEX}",
+          "%{SSN:SSN_REGEX}",
+          "%{PHONE:PHONE_REGEX}"
+        ],
+        "pattern_definitions": {
+          "CREDIT_CARD": """\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{4}""",
+          "SSN": """\d{3}-\d{2}-\d{4}""",
+          "PHONE": """(\+\d{1,2}\s?)?1?\-?\.?\s?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}"""
+        },
+        "on_failure": [
+          {
+            "set": {
+              "description": "Set 'error.message'",
+              "field": "failure",
+              "value": "REDACT_PROCESSOR_FAILED",
+              "override": false
+            }
+          },
+          {
+            "set": {
+              "field": "redact.proc.successful",
+              "value": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "set": {
+        "if": "ctx?.redact?.message.contains('REDACTPROC')",
+        "field": "redact.proc.found",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "if": "ctx?.redact?.pii?.found == null",
+        "field": "redact.pii.found",
+        "value": false
+      }
+    },
+    {
+      "set": {
+        "if": "ctx?.redact?.proc?.found == true",
+        "field": "redact.pii.found",
+        "value": true
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "set": {
+        "field": "failure",
+        "value": "GENERAL_FAILURE",
+        "override": false
+      }
+    }
+  ]
+}
+
+
+# Updated Process PII pipeline that now call the NER and Redact Processor pipeline
+DELETE _ingest/pipeline/process-pii
+PUT _ingest/pipeline/process-pii
+{
+  "processors": [
+    {
+      "set": {
+        "description": "Set true if enabling sampling, otherwise false",
+        "field": "sample.enabled",
+        "value": true
+      }
+    },
+    {
+      "set": {
+        "description": "Set Sampling Rate 0 None 10000 all allows for 0.01% precision",
+        "field": "sample.sample_rate",
+        "value": 1000
+      }
+    },
+    {
+      "set": {
+        "description": "Set to false if you want to drop unsampled data, handy for reindexing hostorical data",
+        "field": "sample.keep_unsampled",
+        "value": true
+      }
+    },
+    {
+      "pipeline": {
+        "if": "ctx.sample.enabled == true",
+        "name": "logs-sampler",
+        "ignore_failure": true
+      }
+    },
+    {
+      "pipeline": {
+        "if": "ctx.sample.enabled == false || (ctx.sample.enabled == true && ctx.sample.sampled == true)",
+        "name": "logs-ner-pii-processor"
+      }
+    },
+    {
+      "pipeline": {
+        "if": "ctx.sample.enabled == false || (ctx.sample.enabled == true &&  ctx.sample.sampled == true)",
+        "name": "logs-pii-redact-processor"
+      }
+    }
+  ]
+}
