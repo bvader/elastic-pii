@@ -1,0 +1,57 @@
+###################################################################################################
+# PART 2  Access Control 
+###################################################################################################
+
+# Create a role that does not have access to the raw.message field
+GET _security/role/protect-pii
+DELETE _security/role/protect-pii
+PUT _security/role/protect-pii
+{
+  "cluster": [],
+  "indices": [
+    {
+      "names": [
+        "logs-*"
+      ],
+      "privileges": [
+        "read",
+        "view_index_metadata"
+      ],
+      "field_security": {
+        "grant": [
+          "*"
+        ],
+        "except": [
+          "raw.message"
+        ]
+      },
+      "allow_restricted_indices": false
+    }
+  ],
+  "applications": [
+    {
+      "application": "kibana-.kibana",
+      "privileges": [
+        "all"
+      ],
+      "resources": [
+        "*"
+      ]
+    }
+  ],
+  "run_as": [],
+  "metadata": {},
+  "transient_metadata": {
+    "enabled": true
+  }
+}
+
+# Create user stephen with protect-pii role
+GET _security/user/stephen
+DELETE /_security/user/stephen
+POST /_security/user/stephen
+{
+  "password" : "jellojackal123",
+  "roles" : [ "protect-pii" ],
+  "full_name" : "Stephen Brown"
+}
