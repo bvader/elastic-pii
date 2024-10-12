@@ -26,6 +26,7 @@ DATA_STREAM_TYPE = "logs"
 DATA_STREAM_DATASET = "pii"
 DATA_STREAM_NAMESPACE= "default"
 SERVICE_NAME= "pii-generator"
+EVENT_DATASET= "pii-test"
 
 # Create the client instance uusing elastic cloud 
 es = Elasticsearch(
@@ -38,11 +39,6 @@ es = Elasticsearch(
 #     ELASTIC_HOST,
 #     basic_auth=(ELASTIC_USER, ELASTIC_PASSWORD)
 # )
-
-es = Elasticsearch(
-    cloud_id=ELASTIC_CLOUD_ID,
-    basic_auth=("elastic", ELASTIC_PASSWORD)
-)
 
 print(f"Connection Established : \n{json.dumps(es.info().body,indent=4)}")
 
@@ -75,7 +71,7 @@ with open(LOG_FILE, "r") as f:
         "run.id" : run_id,
         "file.name" : LOG_FILE,
         "event" : {
-         "dataset" : "piitest"}
+         "dataset" : EVENT_DATASET}
         }
     action = {
       "_index": data_stream,
