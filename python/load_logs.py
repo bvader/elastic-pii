@@ -73,7 +73,9 @@ with open(LOG_FILE, "r") as f:
         "service" : {"name": SERVICE_NAME},
         "data_stream": {"dataset" : DATA_STREAM_DATASET, "namespace" : DATA_STREAM_NAMESPACE},
         "run.id" : run_id,
-        "file.name" : LOG_FILE
+        "file.name" : LOG_FILE,
+        "event" : {
+         "dataset" : "piitest"}
         }
     action = {
       "_index": data_stream,
