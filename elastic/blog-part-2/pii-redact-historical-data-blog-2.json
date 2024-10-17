@@ -16,27 +16,27 @@
 DELETE _ingest/pipeline/sendtopii
 PUT _ingest/pipeline/sendtopii
 {
-	"processors": [
-		{
-			"set": {
-				"field": "data_stream.dataset",
-				"value": "pii"
-			}
-		},
-		{
-			"set": {
-				"field": "data_stream.namespace",
-				"value": "default"
-			}
-		},
-		{
-			"reroute" : 
-			{
-				"dataset" : "{{data_stream.dataset}}",
-				"namespace": "{{data_stream.namespace}}"
-			}
-		}
-	]
+  "processors": [
+    {
+      "set": {
+        "field": "data_stream.dataset",
+        "value": "pii"
+      }
+    },
+    {
+      "set": {
+        "field": "data_stream.namespace",
+        "value": "default"
+      }
+    },
+    {
+      "reroute" : 
+      {
+        "dataset" : "{{data_stream.dataset}}",
+        "namespace": "{{data_stream.namespace}}"
+      }
+    }
+  ]
 }
 
 # Finally we can run a _reindex to select the data we want to test / assess. 
@@ -44,27 +44,27 @@ PUT _ingest/pipeline/sendtopii
 
 POST _reindex?wait_for_completion=false
 {
-	"source": {
-		"index": "logs-test-default",
-		"query": {
-			"bool": {
-				"filter": [
-					{
-						"range": {
-							"@timestamp": {
-								"gte": "now-1h/h",
-								"lt": "now"
-							}
-						}
-					}
-				]
-			}
-		}
-	},
-	"dest": {
-		"op_type": "create",
-		"index": "tmp",
-		"pipeline": "sendtopii"
-	}
+  "source": {
+    "index": "logs-test-default",
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "range": {
+              "@timestamp": {
+                "gte": "now-1h/h",
+                "lt": "now"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "dest": {
+    "op_type": "create",
+    "index": "tmp",
+    "pipeline": "sendtopii"
+  }
 }
-		
+    
