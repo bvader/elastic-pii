@@ -7,7 +7,6 @@ FROM logs-pii-default
 | STATS pii_count = count(*)
 | WHERE pii_count > 0
 
-
 ########################################
 # Alert Settings
 ########################################
