@@ -116,6 +116,7 @@ PUT _ingest/pipeline/logs-sampler
   ]
 }
 
+
 # NER Pipeline
 DELETE _ingest/pipeline/logs-ner-pii-processor
 PUT _ingest/pipeline/logs-ner-pii-processor
@@ -146,20 +147,26 @@ PUT _ingest/pipeline/logs-ner-pii-processor
       "set": {
         "description": "Set to PER, LOC, ORG to skip, or NONE to not drop any replacement",
         "field": "redact.ner.minimum_score",
-        "value": 0.0
+        "value": 0
       }
     },
     {
       "set": {
-        "if" : "ctx.redact.message == null",
+        "if": "ctx?.redact?.message == null",
         "field": "redact.message",
         "copy_from": "message"
       }
     },
     {
       "set": {
-        "field": "redact.successful",
+        "field": "redact.ner.successful",
         "value": true
+      }
+    },
+    {
+      "set": {
+        "field": "redact.ner.found",
+        "value": false
       }
     },
     {
@@ -178,7 +185,7 @@ PUT _ingest/pipeline/logs-ner-pii-processor
           },
           {
             "set": {
-              "field": "redact.successful",
+              "field": "redact.ner.successful",
               "value": false
             }
           }
@@ -194,7 +201,7 @@ PUT _ingest/pipeline/logs-ner-pii-processor
           	if ((item['class_name'] != ctx.redact.ner.skip_entity) && 
           	  (item['class_probability'] >= ctx.redact.ner.minimum_score)) {  
           		  msg = msg.replace(item['entity'], '<' + 
-          		  'REDACTNER-'+ item['class_name'] + '>')
+          		  'REDACTNER-'+ item['class_name'] + '_NER>')
           	}
           }
           ctx.redact.message = msg""",
@@ -214,6 +221,29 @@ PUT _ingest/pipeline/logs-ner-pii-processor
             }
           }
         ]
+      }
+    },
+    
+    {
+      "set": {
+        "if": "ctx?.ml?.inference?.entities.size() > 0", 
+        "field": "redact.ner.found",
+        "value": true,
+        "ignore_failure": true
+      }
+    },
+    {
+      "set": {
+        "if": "ctx?.redact?.pii?.found == null",
+        "field": "redact.pii.found",
+        "value": false
+      }
+    },
+    {
+      "set": {
+        "if": "ctx?.redact?.ner?.found == true",
+        "field": "redact.pii.found",
+        "value": true
       }
     },
     {
@@ -237,6 +267,7 @@ PUT _ingest/pipeline/logs-ner-pii-processor
     }
   ]
 }
+
 
 # Updated Process PII pipeline that now call the NER pipeline
 DELETE _ingest/pipeline/process-pii
