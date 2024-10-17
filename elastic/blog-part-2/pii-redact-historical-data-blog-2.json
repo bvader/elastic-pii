@@ -16,8 +16,8 @@
     },
 
 # Second we will create a pipeline that will reroute the data to the correct data stream 
-so that it will run through all the PII assessment / detection pipelines. 
-It also sets the correct dataset and namespace
+# so that it will run through all the PII assessment / detection pipelines. 
+# It also sets the correct dataset and namespace
 
 DELETE _ingest/pipeline/sendtopii
 PUT _ingest/pipeline/sendtopii
@@ -45,7 +45,14 @@ PUT _ingest/pipeline/sendtopii
   ]
 }
 
-# Finally we can run a `_reindex` to select the data we want to test / assess. First select the source data stream you want to assess, in this example it is the `logs-generic-default` logs data stream. Note I also added a `range` filter to select a specific time range. There is a bit of a "trick" that we need to use since we are re-routing the data to the data stream `logs-pii-default`. To do this, we just set `"index": "logs-tmp-default"` in the `_reindex` as the correct data stream will be set in the pipeline. We need to do that because `reroute` is a `noop` if it is called from / to the same datastream. 
+# Finally we can run a `_reindex` to select the data we want to test / assess.  
+# First select the source data stream you want to assess, in this example it is the 
+# `logs-generic-default` logs data stream. Note I also added a `range` filter to 
+# select a specific time range. There is a bit of a "trick" that we need to use 
+# since we are re-routing the data to the data stream `logs-pii-default`. 
+# To do this, we just set `"index": "logs-tmp-default"` in the `_reindex` as 
+# the correct data stream will be set in the pipeline. We need to do that because 
+# `reroute` is a `noop` if it is called from / to the same datastream. 
 
 POST _reindex?wait_for_completion=false
 {
