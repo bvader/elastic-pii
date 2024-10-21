@@ -1,8 +1,8 @@
-#######################################
-# RBAC Role and User 
-#######################################
+###################################################################################################
+# PART 2  Access Control 
+###################################################################################################
 
-# Create role with no access to the raw.message field
+# Create a role that does not have access to the raw.message field
 GET _security/role/protect-pii
 DELETE _security/role/protect-pii
 PUT _security/role/protect-pii

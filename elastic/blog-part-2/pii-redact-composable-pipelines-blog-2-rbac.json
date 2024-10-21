@@ -51,7 +51,7 @@ GET _security/user/stephen
 DELETE /_security/user/stephen
 POST /_security/user/stephen
 {
-  "password" : "jellojackal123",
+  "password" : "mypassword",
   "roles" : [ "protect-pii" ],
   "full_name" : "Stephen Brown"
 }

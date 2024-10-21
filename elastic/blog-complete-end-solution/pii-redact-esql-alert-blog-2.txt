@@ -1,0 +1,39 @@
+########################################
+# ESQL to detect / count PII
+########################################
+
+FROM logs-pii-default
+| WHERE redact.pii.found == true
+| STATS pii_count = count(*)
+| WHERE pii_count > 0
+
+########################################
+# Alert Settings
+########################################
+
+Select a time field: @timestamp
+Set the time window: 5 minutes**
+
+For each alert: On status changes
+Run when: Query matched
+
+
+Elasticsearch query rule {{rule.name}} is active:
+
+- PII Found: true
+- PII Count: {{#context.hits}} {{_source.pii_count}}{{/context.hits}}
+- Conditions Met: {{context.conditions}} over {{rule.params.timeWindowSize}}{{rule.params.timeWindowUnit}}
+- Timestamp: {{context.date}}
+- Link: {{context.link}}
+
+Add an Action for when the Alert is Recovered. 
+
+For each alert: On status changes
+Run when: Recovered
+
+Elasticsearch query rule {{rule.name}} is Recovered:
+
+- PII Found: false
+- Conditions Not Met: {{context.conditions}} over {{rule.params.timeWindowSize}}{{rule.params.timeWindowUnit}}
+- Timestamp: {{context.date}}
+- Link: {{context.link}}
