@@ -1,4 +1,5 @@
-#### Creating and Loading the Sample Data Set 
+#### Creating and Loading the Sample Data Set
+**NOTE** There is a pre-generated log file `pii.log` if you want to use that. Then you only need to run `load_logs.py`.
 
 ```
 $ cd elastic-pii
@@ -40,3 +41,4 @@ $ python load_logs.py
 ```
 $ python load_logs.py
 ```
+
