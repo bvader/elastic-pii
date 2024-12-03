@@ -82,7 +82,7 @@ def main():
 
     for _ in range(num_lines):
       log_message = generate_log_entry()
-      log_line = f"[{datetime.now(timezone.utc).astimezone().isoformat()+"Z"}] {log_message}"
+      log_line = f"[{datetime.now(timezone.utc).astimezone().isoformat()}Z] {log_message}"
       #log_line = f"{log_message}"
       #print({log_line})
       writefile.write(log_line+"\n")
